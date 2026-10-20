@@ -15,9 +15,9 @@ Real-time Voice-to-Voice AI Assistant for Android
 - Real-time waveform visualizer
 - Custom **Triggers** (phrase → action)
 - Multi-provider API keys: **Gemini** + **Grok (xAI)** + **OpenRouter**
-- Settings screen with secure local storage
+- Settings screen with secure local storage (DataStore)
 - Chat history view
-- Function calling ready (`openWebsite`, search, reminders...)
+- Function calling ready (`openWebsite`, etc.)
 - Hinglish + natural expressive personality
 - Completely free core features (bring your own keys)
 
@@ -29,41 +29,38 @@ Real-time Voice-to-Voice AI Assistant for Android
 |--------------------|-------------------------------------|
 | Language           | Kotlin                              |
 | UI                 | Jetpack Compose + Material 3        |
-| Architecture       | MVVM + Clean                        |
-| Voice              | Gemini Live API (Native Audio)      |
-| Audio              | AudioRecord + AudioTrack (PCM 16kHz / 24kHz) |
-| DI                 | Hilt / Manual                       |
+| Voice Engine       | Custom Gemini Live WebSocket client |
+| Audio Capture      | AudioRecord (PCM 16 kHz mono)       |
+| Audio Playback     | AudioTrack (PCM 24 kHz)             |
 | Storage            | DataStore Preferences               |
-| Min SDK            | 26 (Android 8.0)                    |
+| Network            | OkHttp WebSocket                    |
+| Min SDK            | 26                                  |
 | Target SDK         | 35                                  |
 
 ---
 
-## 📂 Project Structure
+## 📂 Current Progress
 
-```
-app/
-├── src/main/
-│   ├── java/com/zoya/voice/
-│   │   ├── ui/               # Screens & Composables
-│   │   ├── voice/            # Gemini Live + Audio engine
-│   │   ├── data/             # Settings, Triggers, Repository
-│   │   ├── domain/           # Models & UseCases
-│   │   └── di/               # Dependency injection
-│   ├── res/
-│   └── AndroidManifest.xml
-├── build.gradle.kts
-└── proguard-rules.pro
-```
+- [x] Project foundation + dark neon UI
+- [x] Bottom navigation (Home / Chat / Triggers / Settings)
+- [x] Glowing Orb + Waveform
+- [x] Settings with multi API keys + DataStore
+- [x] Triggers system with persistence
+- [x] **Gemini Live Audio Engine** (Step 3)
+- [ ] Advanced interruptions + background service
+- [ ] Full tool calling (open browser, reminders…)
+- [ ] APK release build
 
 ---
 
-## ⚙️ Getting Started
+## ⚙️ How to Run
 
 1. Clone the repo
-2. Open in **Android Studio** (Ladybug or newer recommended)
-3. Add your Gemini API key in Settings after first launch
-4. Run on a real device (microphone required)
+2. Open in **Android Studio**
+3. Sync Gradle
+4. Run on a **real device** (emulator mic is limited)
+5. Go to **Settings** → paste your **Gemini API Key** → Save
+6. Back to Home → tap the Orb / Mic → allow microphone permission
 
 ```bash
 git clone https://github.com/nasirnadeem5115-bot/zoya-voice.git
@@ -77,21 +74,7 @@ Zoya talks like a close girlfriend:
 - Flirty, playful, slightly teasing
 - Smart & emotionally responsive
 - Bold witty one-liners + light sarcasm
-- Never robotic, never boring
-
----
-
-## 🛠 Roadmap
-
-- [x] Project foundation
-- [ ] Dark neon UI + Glowing Orb
-- [ ] Settings (multi API keys)
-- [ ] Gemini Live full integration
-- [ ] Interruptions + continuous session
-- [ ] Triggers system
-- [ ] Function calling tools
-- [ ] Chat history
-- [ ] APK release
+- Never robotic
 
 ---
 

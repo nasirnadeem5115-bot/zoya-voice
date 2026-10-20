@@ -1,5 +1,9 @@
 package com.zoya.voice.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,9 +24,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.zoya.voice.data.SettingsRepository
 import com.zoya.voice.domain.model.SessionStatus
 import com.zoya.voice.ui.theme.*
+import com.zoya.voice.voice.VoiceSessionManager
 
 @Composable
 fun HomeScreen() {
@@ -31,8 +37,36 @@ fun HomeScreen() {
     val userName by settingsRepo.userName.collectAsState(initial = "Babe")
     val geminiKey by settingsRepo.geminiKey.collectAsState(initial = "")
 
-    var status by remember { mutableStateOf(SessionStatus.IDLE) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val sessionManager = remember { VoiceSessionManager(context) }
+    val status by sessionManager.status.collectAsState()
+    val error by sessionManager.error.collectAsState()
+
+    // Permission launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted && geminiKey.isNotBlank()) {
+            sessionManager.startSession(geminiKey)
+        }
+    }
+
+    fun toggleSession() {
+        when (status) {
+            SessionStatus.IDLE, SessionStatus.ERROR -> {
+                if (geminiKey.isBlank()) return
+                val hasPermission = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (hasPermission) {
+                    sessionManager.startSession(geminiKey)
+                } else {
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+            else -> sessionManager.stopSession()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -65,7 +99,7 @@ fun HomeScreen() {
                         SessionStatus.LISTENING -> "Listening…"
                         SessionStatus.SPEAKING -> "Speaking…"
                         SessionStatus.CONNECTING -> "Connecting…"
-                        SessionStatus.ERROR -> errorMessage ?: "Something went wrong"
+                        SessionStatus.ERROR -> error ?: "Something went wrong"
                         else -> "Tap the orb to talk"
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -89,19 +123,7 @@ fun HomeScreen() {
         // Glowing Orb
         GlowingOrb(
             status = status,
-            onClick = {
-                if (geminiKey.isBlank()) {
-                    errorMessage = "Add Gemini API key in Settings first"
-                    status = SessionStatus.ERROR
-                    return@GlowingOrb
-                }
-                status = when (status) {
-                    SessionStatus.IDLE, SessionStatus.ERROR -> SessionStatus.CONNECTING
-                    else -> SessionStatus.IDLE
-                }
-                errorMessage = null
-                // Real Gemini Live connection will come in next steps
-            }
+            onClick = { toggleSession() }
         )
 
         Spacer(modifier = Modifier.height(28.dp))
@@ -124,18 +146,7 @@ fun HomeScreen() {
         Spacer(modifier = Modifier.height(32.dp))
 
         FloatingActionButton(
-            onClick = {
-                if (geminiKey.isBlank()) {
-                    errorMessage = "Add Gemini API key in Settings first"
-                    status = SessionStatus.ERROR
-                    return@FloatingActionButton
-                }
-                status = when (status) {
-                    SessionStatus.IDLE, SessionStatus.ERROR -> SessionStatus.LISTENING
-                    else -> SessionStatus.IDLE
-                }
-                errorMessage = null
-            },
+            onClick = { toggleSession() },
             containerColor = if (status == SessionStatus.LISTENING || status == SessionStatus.SPEAKING)
                 NeonPink else BgElevated,
             contentColor = Color.White,
@@ -146,6 +157,15 @@ fun HomeScreen() {
                     Icons.Default.MicOff else Icons.Default.Mic,
                 contentDescription = "Mic",
                 modifier = Modifier.size(28.dp)
+            )
+        }
+
+        if (geminiKey.isBlank()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Add Gemini API key in Settings first",
+                color = NeonPink,
+                style = MaterialTheme.typography.bodyMedium
             )
         }
 
