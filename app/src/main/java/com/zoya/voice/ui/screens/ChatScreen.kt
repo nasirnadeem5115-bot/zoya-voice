@@ -12,13 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.zoya.voice.domain.model.ChatMessage
 import com.zoya.voice.ui.theme.NeonPink
-
-data class ChatMessage(
-    val id: String,
-    val text: String,
-    val isUser: Boolean
-)
 
 @Composable
 fun ChatScreen() {
@@ -26,7 +21,6 @@ fun ChatScreen() {
     var input by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Messages
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -75,7 +69,6 @@ fun ChatScreen() {
             }
         }
 
-        // Input
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -94,13 +87,14 @@ fun ChatScreen() {
             FloatingActionButton(
                 onClick = {
                     if (input.isNotBlank()) {
-                        messages = messages + ChatMessage(
+                        val userMsg = ChatMessage(
                             id = System.currentTimeMillis().toString(),
                             text = input,
                             isUser = true
                         )
+                        messages = messages + userMsg
                         input = ""
-                        // Placeholder reply
+                        // Placeholder – real voice reply later
                         messages = messages + ChatMessage(
                             id = (System.currentTimeMillis() + 1).toString(),
                             text = "Hmm… interesting. Full voice will be way more fun 😉",

@@ -16,19 +16,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zoya.voice.data.SettingsRepository
+import com.zoya.voice.domain.model.SessionStatus
 import com.zoya.voice.ui.theme.*
-
-enum class SessionStatus {
-    IDLE, CONNECTING, LISTENING, SPEAKING, ERROR
-}
 
 @Composable
 fun HomeScreen() {
+    val context = LocalContext.current
+    val settingsRepo = remember { SettingsRepository(context) }
+    val userName by settingsRepo.userName.collectAsState(initial = "Babe")
+    val geminiKey by settingsRepo.geminiKey.collectAsState(initial = "")
+
     var status by remember { mutableStateOf(SessionStatus.IDLE) }
-    val userName = "Babe" // Will come from Settings later
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -61,7 +65,7 @@ fun HomeScreen() {
                         SessionStatus.LISTENING -> "Listening…"
                         SessionStatus.SPEAKING -> "Speaking…"
                         SessionStatus.CONNECTING -> "Connecting…"
-                        SessionStatus.ERROR -> "Something went wrong"
+                        SessionStatus.ERROR -> errorMessage ?: "Something went wrong"
                         else -> "Tap the orb to talk"
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -73,9 +77,7 @@ fun HomeScreen() {
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(listOf(NeonPink, NeonRed))
-                    ),
+                    .background(Brush.linearGradient(listOf(NeonPink, NeonRed))),
                 contentAlignment = Alignment.Center
             ) {
                 Text("Z", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -88,14 +90,17 @@ fun HomeScreen() {
         GlowingOrb(
             status = status,
             onClick = {
+                if (geminiKey.isBlank()) {
+                    errorMessage = "Add Gemini API key in Settings first"
+                    status = SessionStatus.ERROR
+                    return@GlowingOrb
+                }
                 status = when (status) {
                     SessionStatus.IDLE, SessionStatus.ERROR -> SessionStatus.CONNECTING
                     else -> SessionStatus.IDLE
                 }
-                // Simulate connection for now
-                if (status == SessionStatus.CONNECTING) {
-                    // Later: real Gemini Live connect
-                }
+                errorMessage = null
+                // Real Gemini Live connection will come in next steps
             }
         )
 
@@ -114,18 +119,22 @@ fun HomeScreen() {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Waveform placeholder
         WaveformPlaceholder(active = status == SessionStatus.LISTENING || status == SessionStatus.SPEAKING)
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Mic button
         FloatingActionButton(
             onClick = {
+                if (geminiKey.isBlank()) {
+                    errorMessage = "Add Gemini API key in Settings first"
+                    status = SessionStatus.ERROR
+                    return@FloatingActionButton
+                }
                 status = when (status) {
                     SessionStatus.IDLE, SessionStatus.ERROR -> SessionStatus.LISTENING
                     else -> SessionStatus.IDLE
                 }
+                errorMessage = null
             },
             containerColor = if (status == SessionStatus.LISTENING || status == SessionStatus.SPEAKING)
                 NeonPink else BgElevated,

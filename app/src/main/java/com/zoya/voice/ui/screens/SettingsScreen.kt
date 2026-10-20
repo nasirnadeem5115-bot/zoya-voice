@@ -11,18 +11,39 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.zoya.voice.data.SettingsRepository
 import com.zoya.voice.ui.theme.NeonPink
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen() {
-    var userName by remember { mutableStateOf("Babe") }
+    val context = LocalContext.current
+    val repo = remember { SettingsRepository(context) }
+    val scope = rememberCoroutineScope()
+
+    val savedUserName by repo.userName.collectAsState(initial = "Babe")
+    val savedGemini by repo.geminiKey.collectAsState(initial = "")
+    val savedGrok by repo.grokKey.collectAsState(initial = "")
+    val savedOpenRouter by repo.openRouterKey.collectAsState(initial = "")
+
+    var userName by remember { mutableStateOf("") }
     var geminiKey by remember { mutableStateOf("") }
     var grokKey by remember { mutableStateOf("") }
     var openRouterKey by remember { mutableStateOf("") }
+
+    // Load once
+    LaunchedEffect(savedUserName, savedGemini, savedGrok, savedOpenRouter) {
+        if (userName.isEmpty()) userName = savedUserName
+        if (geminiKey.isEmpty()) geminiKey = savedGemini
+        if (grokKey.isEmpty()) grokKey = savedGrok
+        if (openRouterKey.isEmpty()) openRouterKey = savedOpenRouter
+    }
+
     var showGemini by remember { mutableStateOf(false) }
     var showGrok by remember { mutableStateOf(false) }
     var showOpenRouter by remember { mutableStateOf(false) }
@@ -42,7 +63,6 @@ fun SettingsScreen() {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // User Name
         OutlinedTextField(
             value = userName,
             onValueChange = { userName = it },
@@ -66,7 +86,6 @@ fun SettingsScreen() {
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
         )
 
-        // Gemini
         ApiKeyField(
             label = "Gemini API Key (Live Voice – Primary)",
             value = geminiKey,
@@ -77,7 +96,6 @@ fun SettingsScreen() {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Grok
         ApiKeyField(
             label = "Grok (xAI) API Key",
             value = grokKey,
@@ -88,7 +106,6 @@ fun SettingsScreen() {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // OpenRouter
         ApiKeyField(
             label = "OpenRouter API Key",
             value = openRouterKey,
@@ -101,8 +118,10 @@ fun SettingsScreen() {
 
         Button(
             onClick = {
-                // TODO: Save to DataStore
-                saved = true
+                scope.launch {
+                    repo.saveAll(userName, geminiKey, grokKey, openRouterKey)
+                    saved = true
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -116,7 +135,7 @@ fun SettingsScreen() {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Gemini is used for real-time voice-to-voice. Grok & OpenRouter are ready for future upgrades.",
+            text = "Gemini is used for real-time voice-to-voice. Grok & OpenRouter are ready for future upgrades / fallback.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

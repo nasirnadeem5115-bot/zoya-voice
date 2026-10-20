@@ -11,28 +11,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.zoya.voice.data.TriggerRepository
+import com.zoya.voice.domain.model.Trigger
 import com.zoya.voice.ui.theme.NeonPink
-
-data class Trigger(
-    val id: String,
-    val name: String,
-    val phrase: String,
-    val action: String,
-    var enabled: Boolean
-)
+import kotlinx.coroutines.launch
 
 @Composable
 fun TriggersScreen() {
-    var triggers by remember {
-        mutableStateOf(
-            listOf(
-                Trigger("1", "Open YouTube", "open youtube", "openWebsite:https://youtube.com", true),
-                Trigger("2", "Search Google", "search for", "search", true),
-                Trigger("3", "Set Reminder", "remind me", "reminder", true)
-            )
-        )
-    }
+    val context = LocalContext.current
+    val repo = remember { TriggerRepository(context) }
+    val scope = rememberCoroutineScope()
+
+    val triggers by repo.triggers.collectAsState(initial = emptyList())
 
     Column(
         modifier = Modifier
@@ -48,47 +40,74 @@ fun TriggersScreen() {
                 text = "Triggers",
                 style = MaterialTheme.typography.headlineMedium
             )
-            IconButton(onClick = { /* TODO: Add dialog */ }) {
+            IconButton(onClick = {
+                // Simple add for now – full dialog in later step
+                val newTrigger = Trigger(
+                    id = System.currentTimeMillis().toString(),
+                    name = "New Trigger",
+                    phrase = "hey zoya",
+                    action = "custom",
+                    enabled = true
+                )
+                scope.launch {
+                    repo.save(triggers + newTrigger)
+                }
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "Add", tint = NeonPink)
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(triggers, key = { it.id }) { trigger ->
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+        if (triggers.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No triggers yet. Tap + to add one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(triggers, key = { it.id }) { trigger ->
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        Switch(
-                            checked = trigger.enabled,
-                            onCheckedChange = { enabled ->
-                                triggers = triggers.map {
-                                    if (it.id == trigger.id) it.copy(enabled = enabled) else it
-                                }
-                            },
-                            colors = SwitchDefaults.colors(checkedTrackColor = NeonPink)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(trigger.name, style = MaterialTheme.typography.titleLarge)
-                            Text(
-                                text = "\"${trigger.phrase}\"",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Switch(
+                                checked = trigger.enabled,
+                                onCheckedChange = { enabled ->
+                                    scope.launch {
+                                        val updated = triggers.map {
+                                            if (it.id == trigger.id) it.copy(enabled = enabled) else it
+                                        }
+                                        repo.save(updated)
+                                    }
+                                },
+                                colors = SwitchDefaults.colors(checkedTrackColor = NeonPink)
                             )
-                        }
-                        IconButton(onClick = {
-                            triggers = triggers.filter { it.id != trigger.id }
-                        }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(trigger.name, style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    text = "\"${trigger.phrase}\"",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = {
+                                scope.launch {
+                                    repo.save(triggers.filter { it.id != trigger.id })
+                                }
+                            }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
