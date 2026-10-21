@@ -9,7 +9,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Lightweight Gemini Live API client using OkHttp WebSocket.
+ * Gemini Live API client using OkHttp WebSocket.
  * Sends 16 kHz PCM, receives 24 kHz PCM + tool calls.
  */
 class GeminiLiveClient(
@@ -28,9 +28,10 @@ class GeminiLiveClient(
 
     companion object {
         private const val TAG = "GeminiLive"
-        // Use the latest Live model available
-        private const val MODEL = "models/gemini-2.5-flash-preview-native-audio-dialog"
-        private const val WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+        // Current native audio model (update if Google renames)
+        private const val MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+        private const val WS_URL =
+            "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
     }
 
     fun connect() {
@@ -49,12 +50,9 @@ class GeminiLiveClient(
                 handleMessage(text)
             }
 
-            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                // Some implementations send binary; we mainly use text JSON
-            }
+            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {}
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "Closing: $code $reason")
                 webSocket.close(1000, null)
             }
 
@@ -113,38 +111,39 @@ class GeminiLiveClient(
         try {
             val json = JSONObject(text)
 
-            // Setup complete
             if (json.has("setupComplete")) {
                 onStatus("ready")
                 return
             }
 
-            // Server content (audio + text)
-            val serverContent = json.optJSONObject("serverContent") ?: return
+            val serverContent = json.optJSONObject("serverContent")
+            if (serverContent != null) {
+                if (serverContent.optBoolean("interrupted", false)) {
+                    onStatus("interrupted")
+                    return
+                }
 
-            // Interrupted by user
-            if (serverContent.optBoolean("interrupted", false)) {
-                onStatus("interrupted")
-                return
-            }
-
-            val modelTurn = serverContent.optJSONObject("modelTurn")
-            modelTurn?.optJSONArray("parts")?.let { parts ->
-                for (i in 0 until parts.length()) {
-                    val part = parts.getJSONObject(i)
-                    val inlineData = part.optJSONObject("inlineData")
-                    if (inlineData != null) {
-                        val mime = inlineData.optString("mimeType", "")
-                        val data = inlineData.optString("data", "")
-                        if (mime.contains("audio") && data.isNotEmpty()) {
-                            val pcm = Base64.decode(data, Base64.DEFAULT)
-                            onAudio(pcm)
+                val modelTurn = serverContent.optJSONObject("modelTurn")
+                modelTurn?.optJSONArray("parts")?.let { parts ->
+                    for (i in 0 until parts.length()) {
+                        val part = parts.getJSONObject(i)
+                        val inlineData = part.optJSONObject("inlineData")
+                        if (inlineData != null) {
+                            val mime = inlineData.optString("mimeType", "")
+                            val data = inlineData.optString("data", "")
+                            if (mime.contains("audio") && data.isNotEmpty()) {
+                                val pcm = Base64.decode(data, Base64.DEFAULT)
+                                onAudio(pcm)
+                            }
                         }
                     }
                 }
+
+                if (serverContent.optBoolean("turnComplete", false)) {
+                    onStatus("turnComplete")
+                }
             }
 
-            // Tool calls
             val toolCall = json.optJSONObject("toolCall")
             toolCall?.optJSONArray("functionCalls")?.let { calls ->
                 for (i in 0 until calls.length()) {
@@ -155,11 +154,6 @@ class GeminiLiveClient(
                     onToolCall?.invoke(name, args, id)
                 }
             }
-
-            if (serverContent.optBoolean("turnComplete", false)) {
-                onStatus("turnComplete")
-            }
-
         } catch (e: Exception) {
             Log.e(TAG, "Parse error", e)
         }

@@ -1,6 +1,8 @@
 package com.zoya.voice.voice
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import com.zoya.voice.domain.model.SessionStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,8 +11,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 
 /**
- * High-level manager that ties AudioRecorder + GeminiLiveClient + AudioPlayer together.
- * Handles continuous session and interruptions.
+ * High-level manager: AudioRecorder + GeminiLiveClient + AudioPlayer.
+ * Handles continuous session, interruptions, and basic tools.
  */
 class VoiceSessionManager(private val context: Context) {
 
@@ -31,12 +33,15 @@ Use bold witty one-liners, light sarcasm, and engaging conversation.
 Keep responses natural and short-to-medium length for voice.
 Avoid explicit content, but maintain charm and attitude.
 Speak in Hinglish or English matching the user.
-You can call tools when needed.
+You can call tools when needed (open websites etc).
 Always stay in character as Zoya.
 """.trimIndent()
 
     fun startSession(apiKey: String) {
-        if (_status.value == SessionStatus.LISTENING || _status.value == SessionStatus.CONNECTING) return
+        if (_status.value == SessionStatus.LISTENING ||
+            _status.value == SessionStatus.CONNECTING ||
+            _status.value == SessionStatus.SPEAKING
+        ) return
 
         _error.value = null
         _status.value = SessionStatus.CONNECTING
@@ -98,19 +103,30 @@ Always stay in character as Zoya.
 
     fun interrupt() {
         player?.interrupt()
-        // Gemini Live detects user speech and sends interrupted automatically
     }
 
     private fun handleToolCall(name: String, args: JSONObject, id: String) {
-        Log.d("ZoyaTools", "Tool call: $name $args")
-        // Basic openWebsite support
-        val result = when (name) {
-            "openWebsite", "open_url" -> {
-                val url = args.optString("url", args.optString("website", ""))
-                // Later: actually open browser Intent
-                JSONObject().put("status", "opened").put("url", url)
+        Log.d("ZoyaTools", "Tool: $name $args")
+        val result = when (name.lowercase()) {
+            "openwebsite", "open_url", "open_website" -> {
+                val url = args.optString("url")
+                    .ifEmpty { args.optString("website") }
+                    .ifEmpty { args.optString("link") }
+                if (url.isNotBlank()) {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                        JSONObject().put("status", "opened").put("url", url)
+                    } catch (e: Exception) {
+                        JSONObject().put("status", "error").put("message", e.message)
+                    }
+                } else {
+                    JSONObject().put("status", "error").put("message", "No URL provided")
+                }
             }
-            else -> JSONObject().put("status", "unknown_tool")
+            else -> JSONObject().put("status", "unknown_tool").put("name", name)
         }
         client?.sendToolResponse(id, result)
     }
