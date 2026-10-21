@@ -11,14 +11,16 @@ import java.util.concurrent.TimeUnit
 /**
  * Gemini Live API client using OkHttp WebSocket.
  * Sends 16 kHz PCM, receives 24 kHz PCM + tool calls.
- * Updated for gemini-3.8-live (Oct 2026).
+ * Supports automatic model fallback when quota is exhausted.
  */
 class GeminiLiveClient(
     private val apiKey: String,
+    private val model: String,
     private val systemInstruction: String,
     private val onAudio: (ByteArray) -> Unit,
     private val onStatus: (String) -> Unit,
     private val onError: (String) -> Unit,
+    private val onQuotaExhausted: (() -> Unit)? = null,
     private val onToolCall: ((name: String, args: JSONObject, id: String) -> Unit)? = null
 ) {
     private var webSocket: WebSocket? = null
@@ -29,11 +31,41 @@ class GeminiLiveClient(
 
     companion object {
         private const val TAG = "GeminiLive"
-        // Current recommended Live model (as of Oct 2026)
-        private const val MODEL = "models/gemini-3.8-live"
-        // v1beta is the stable Live endpoint
+
+        /** Priority order — first has highest quota / quality, last is last resort */
+        val FALLBACK_MODELS = listOf(
+            "models/gemini-3.8-live",                          // primary (best)
+            "models/gemini-3.1-flash-live-preview",            // next
+            "models/gemini-2.5-flash-native-audio-preview-09-2025",
+            "models/gemini-live-2.5-flash-preview",
+            "models/gemini-2.0-flash-live-001"                 // last resort
+        )
+
         private const val WS_URL =
             "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+
+        fun isQuotaError(message: String): Boolean {
+            val m = message.lowercase()
+            return m.contains("quota") ||
+                m.contains("resource_exhausted") ||
+                m.contains("rate limit") ||
+                m.contains("rate_limit") ||
+                m.contains("429") ||
+                m.contains("exceeded") ||
+                m.contains("too many requests") ||
+                m.contains("billing") ||
+                m.contains("limit") && (m.contains("api") || m.contains("usage") || m.contains("request"))
+        }
+
+        fun isModelUnavailable(message: String): Boolean {
+            val m = message.lowercase()
+            return m.contains("not found") ||
+                m.contains("not supported") ||
+                m.contains("invalid model") ||
+                m.contains("model is not") ||
+                m.contains("404") ||
+                m.contains("does not exist")
+        }
     }
 
     fun connect() {
@@ -43,7 +75,7 @@ class GeminiLiveClient(
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "WebSocket opened")
+                Log.d(TAG, "WebSocket opened → model=$model")
                 sendSetup()
                 onStatus("connected")
             }
@@ -73,11 +105,17 @@ class GeminiLiveClient(
                         "Invalid API key (401)"
                     t.message?.contains("403") == true || response?.code == 403 ->
                         "API key not allowed for Live / region blocked (403)"
+                    response?.code == 429 ->
+                        "Quota exceeded (429)"
                     t.message?.contains("404") == true || response?.code == 404 ->
-                        "Model not found — check Live access"
+                        "Model not found — $model"
                     else -> t.message ?: "Connection failed"
                 }
-                onError(msg)
+                if (isQuotaError(msg) || isModelUnavailable(msg)) {
+                    onQuotaExhausted?.invoke()
+                } else {
+                    onError(msg)
+                }
             }
         })
     }
@@ -85,10 +123,9 @@ class GeminiLiveClient(
     private fun sendSetup() {
         val setup = JSONObject().apply {
             put("setup", JSONObject().apply {
-                put("model", MODEL)
+                put("model", model)
                 put("generationConfig", JSONObject().apply {
                     put("responseModalities", JSONArray().put("AUDIO"))
-                    // Optional: pick a voice (Aoede, Charon, Fenrir, Kore, Puck)
                     put("speechConfig", JSONObject().apply {
                         put("voiceConfig", JSONObject().apply {
                             put("prebuiltVoiceConfig", JSONObject().apply {
@@ -103,7 +140,7 @@ class GeminiLiveClient(
             })
         }
         webSocket?.send(setup.toString())
-        Log.d(TAG, "Setup sent for $MODEL")
+        Log.d(TAG, "Setup sent for $model")
     }
 
     fun sendAudio(pcm16k: ByteArray) {
@@ -136,17 +173,21 @@ class GeminiLiveClient(
         try {
             val json = JSONObject(text)
 
-            // Server error (e.g. invalid model, quota, key)
             if (json.has("error")) {
                 val err = json.optJSONObject("error")
                 val message = err?.optString("message") ?: json.toString()
-                Log.e(TAG, "Server error: $message")
-                onError(message)
+                val code = err?.optInt("code", 0) ?: 0
+                Log.e(TAG, "Server error ($code): $message")
+                if (isQuotaError(message) || isModelUnavailable(message) || code == 429 || code == 404) {
+                    onQuotaExhausted?.invoke()
+                } else {
+                    onError(message)
+                }
                 return
             }
 
             if (json.has("setupComplete")) {
-                Log.d(TAG, "Setup complete — session ready")
+                Log.d(TAG, "Setup complete — $model ready")
                 onStatus("ready")
                 return
             }

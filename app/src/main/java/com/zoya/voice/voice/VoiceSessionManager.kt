@@ -12,7 +12,8 @@ import org.json.JSONObject
 
 /**
  * High-level manager: AudioRecorder + GeminiLiveClient + AudioPlayer.
- * Handles continuous session, interruptions, and basic tools.
+ * Automatic model fallback when quota / model unavailable.
+ * Chain: 3.8 → 3.1 → 2.5 → live-2.5 → 2.0
  */
 class VoiceSessionManager(private val context: Context) {
 
@@ -22,9 +23,15 @@ class VoiceSessionManager(private val context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _activeModel = MutableStateFlow<String?>(null)
+    val activeModel: StateFlow<String?> = _activeModel.asStateFlow()
+
     private var client: GeminiLiveClient? = null
     private var recorder: AudioRecorder? = null
     private var player: AudioPlayer? = null
+
+    private var currentApiKey: String = ""
+    private var modelIndex: Int = 0
 
     private val systemInstruction = """
 You are Zoya — a young, confident, witty, and sassy female AI assistant.
@@ -43,13 +50,39 @@ Always stay in character as Zoya.
             _status.value == SessionStatus.SPEAKING
         ) return
 
+        currentApiKey = apiKey
+        modelIndex = 0
         _error.value = null
-        _status.value = SessionStatus.CONNECTING
+        connectWithCurrentModel()
+    }
 
-        player = AudioPlayer().also { it.start() }
+    private fun connectWithCurrentModel() {
+        val models = GeminiLiveClient.FALLBACK_MODELS
+        if (modelIndex >= models.size) {
+            _error.value = "All models quota exhausted. Try again later."
+            _status.value = SessionStatus.ERROR
+            _activeModel.value = null
+            return
+        }
+
+        val model = models[modelIndex]
+        _activeModel.value = model.removePrefix("models/")
+        _status.value = SessionStatus.CONNECTING
+        Log.d("ZoyaSession", "Trying model[$modelIndex]: $model")
+
+        // Clean previous client only (keep player if already started)
+        client?.close()
+        client = null
+        recorder?.stop()
+        recorder = null
+
+        if (player == null) {
+            player = AudioPlayer().also { it.start() }
+        }
 
         client = GeminiLiveClient(
-            apiKey = apiKey,
+            apiKey = currentApiKey,
+            model = model,
             systemInstruction = systemInstruction,
             onAudio = { pcm ->
                 _status.value = SessionStatus.SPEAKING
@@ -68,13 +101,30 @@ Always stay in character as Zoya.
                     "turnComplete" -> {
                         _status.value = SessionStatus.LISTENING
                     }
-                    "closed" -> stopSession()
+                    "closed" -> {
+                        // only mark idle if we are not mid-fallback
+                    }
                 }
             },
             onError = { msg ->
                 _error.value = msg
                 _status.value = SessionStatus.ERROR
-                stopSession()
+                cleanupSession()
+            },
+            onQuotaExhausted = {
+                Log.w("ZoyaSession", "Quota/unavailable on $model → fallback")
+                modelIndex++
+                if (modelIndex < models.size) {
+                    // brief delay then try next model
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        connectWithCurrentModel()
+                    }, 400)
+                } else {
+                    _error.value = "All models quota exhausted. Try again later."
+                    _status.value = SessionStatus.ERROR
+                    _activeModel.value = null
+                    cleanupSession()
+                }
             },
             onToolCall = { name, args, id ->
                 handleToolCall(name, args, id)
@@ -85,20 +135,27 @@ Always stay in character as Zoya.
     }
 
     private fun startMic() {
+        if (recorder != null) return
         recorder = AudioRecorder { chunk ->
             client?.sendAudio(chunk)
         }
         recorder?.start()
     }
 
-    fun stopSession() {
+    private fun cleanupSession() {
         recorder?.stop()
         recorder = null
         player?.stop()
         player = null
         client?.close()
         client = null
+    }
+
+    fun stopSession() {
+        cleanupSession()
         _status.value = SessionStatus.IDLE
+        _activeModel.value = null
+        modelIndex = 0
     }
 
     fun interrupt() {
