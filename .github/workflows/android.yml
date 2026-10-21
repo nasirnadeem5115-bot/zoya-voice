@@ -19,35 +19,33 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 cmdline-tools;latest'
 
       - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-      - name: Generate Gradle Wrapper
-        run: |
-          gradle wrapper --gradle-version 8.11.1 || true
-          if [ ! -f gradlew ]; then
-            # Fallback: download a minimal wrapper if gradle command not available
-            curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.11.1/gradlew -o gradlew || true
-            chmod +x gradlew || true
-          fi
-          chmod +x gradlew 2>/dev/null || true
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
 
       - name: Build Debug APK
         run: |
-          if [ -f ./gradlew ]; then
-            ./gradlew assembleDebug --stacktrace --no-daemon
-          else
-            # Last resort using system gradle if available
-            gradle assembleDebug --stacktrace --no-daemon
-          fi
+          gradle assembleDebug --stacktrace --no-daemon
+
+      - name: List APK output
+        if: always()
+        run: |
+          find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "No APK found yet"
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: zoya-voice-debug-apk
           path: app/build/outputs/apk/debug/*.apk
