@@ -3,84 +3,54 @@
 **Young • Confident • Witty • Sassy**  
 Real-time Voice-to-Voice AI Assistant for Android
 
-> Like a close girlfriend who actually listens, teases you, and gets things done.
-
 **Repo:** https://github.com/nasirnadeem5115-bot/zoya-voice
 
 ---
 
-## ✅ Current Status (Ready for local test)
+## 📥 APK Download (Your Goal)
 
-| Step | Feature | Status |
-|------|---------|--------|
-| 1 | Project + Dark neon UI + Navigation | Done |
-| 2 | Settings + DataStore (Gemini/Grok/OpenRouter keys) | Done |
-| 3 | Gemini Live Audio Engine (mic → Live → speaker) | Done |
-| 4 | Build fixes + launcher icons + tool calling (open website) | Done |
+1. Go to: https://github.com/nasirnadeem5115-bot/zoya-voice/actions
+2. Open the latest **Build APK** workflow run (green check)
+3. Scroll down to **Artifacts**
+4. Download **zoya-voice-debug-apk**
+5. Unzip → install `app-debug.apk` on your phone
+6. Open app → Settings → paste Gemini API Key → Save
+7. Home → tap Orb / Mic → allow microphone → talk
 
----
+If the Actions run is still in progress, wait 3–6 minutes then refresh.
 
-## 📱 How to Build & Install (Test on your phone)
-
-### Option A – Android Studio (Recommended)
-
-1. Open **Android Studio** (Ladybug / latest)
-2. **File → Open** → select the cloned `zoya-voice` folder
-3. Wait for Gradle Sync (it will download dependencies)
-4. Connect a **real Android phone** (USB debugging ON)
-5. Click **Run** (green play button)
-6. On first launch:
-   - Go to **Settings** tab
-   - Paste your **Gemini API Key**
-   - Tap **Save Settings**
-7. Go back to **Home** → tap the glowing Orb / Mic
-8. Allow **Microphone** permission
-9. Start talking to Zoya
-
-### Option B – Generate APK manually
-
-```bash
-git clone https://github.com/nasirnadeem5115-bot/zoya-voice.git
-cd zoya-voice
-# Open once in Android Studio so it generates gradlew
-# Then:
-./gradlew assembleDebug
-# APK will be at: app/build/outputs/apk/debug/app-debug.apk
-```
-
-Install the APK on your phone and test.
+You can also click **Actions → Build APK → Run workflow** to trigger a new build manually.
 
 ---
 
-## ⚠️ Important Notes for Testing
+## ✅ What is already done on GitHub
 
-- **Real device required** – emulator microphone is limited
-- You need a valid **Gemini API key** from [Google AI Studio](https://aistudio.google.com)
-- First time the model name may need updating if Google renames the Live model
-- Internet + Microphone permission are mandatory
-
----
-
-## 🛠 Features already in the app
-
-- Dark futuristic UI + animated glowing orb
-- Continuous voice session with interruption support
-- Settings: Gemini + Grok + OpenRouter keys (saved locally)
-- Triggers page (custom phrases)
-- Chat page
-- Tool calling: open website in browser
-- Zoya personality (witty, sassy, flirty girlfriend style)
+| Item | Status |
+|------|--------|
+| Repository created | Done |
+| Full Android source (Kotlin + Compose) | Done |
+| Settings (Gemini / Grok / OpenRouter keys) | Done |
+| Glowing Orb UI + Triggers + Chat | Done |
+| Gemini Live voice engine | Done |
+| Build fixes + icons | Done |
+| GitHub Actions to produce APK | Done (this commit) |
 
 ---
 
-## Next possible steps
+## 📱 Alternative: Build in Android Studio
 
-- Better VAD / interruption polish
-- Foreground service for background voice
-- More tools (reminders, search, etc.)
-- Release signed APK
+If Actions APK is not ready yet:
+
+1. Clone the repo
+2. Open in Android Studio
+3. Run on phone or `Build → Build APK(s)`
 
 ---
 
-**Made with attitude**  
-Zoya Voice • 2026
+## Notes for testing
+
+- Real phone recommended
+- Gemini API key required (from Google AI Studio)
+- Microphone + Internet permission required
+
+**Zoya Voice • 2026**

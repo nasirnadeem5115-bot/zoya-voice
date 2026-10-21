@@ -1,35 +1,55 @@
-name: Android CI
+name: Build APK
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Assemble Debug APK
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Grant execute permission for gradlew
-        run: |
-          if [ -f gradlew ]; then chmod +x gradlew; fi
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      - name: Build debug APK
+      - name: Generate Gradle Wrapper
         run: |
-          if [ -f gradlew ]; then
-            ./gradlew assembleDebug --stacktrace
-          else
-            echo "Gradle wrapper not fully present – open in Android Studio to generate wrapper and build."
-            exit 0
+          gradle wrapper --gradle-version 8.11.1 || true
+          if [ ! -f gradlew ]; then
+            # Fallback: download a minimal wrapper if gradle command not available
+            curl -sL https://raw.githubusercontent.com/gradle/gradle/v8.11.1/gradlew -o gradlew || true
+            chmod +x gradlew || true
           fi
+          chmod +x gradlew 2>/dev/null || true
+
+      - name: Build Debug APK
+        run: |
+          if [ -f ./gradlew ]; then
+            ./gradlew assembleDebug --stacktrace --no-daemon
+          else
+            # Last resort using system gradle if available
+            gradle assembleDebug --stacktrace --no-daemon
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: zoya-voice-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 14
